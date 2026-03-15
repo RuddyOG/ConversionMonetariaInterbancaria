@@ -1,0 +1,23 @@
+[
+  {
+    "bank_id": "BUNION",
+    "bank_name": "Banco Unión S.A.",
+    "db_type": "postgresql",
+    "algorithm": "caesar",
+    "api_port": 8001
+  },
+  {
+    "bank_id": "BMSC",
+    "bank_name": "Banco Mercantil Santa Cruz S.A.",
+    "db_type": "mysql",
+    "algorithm": "atbash",
+    "api_port": 8002
+  },
+  {
+    "bank_id": "BNB",
+    "bank_name": "Banco Nacional de Bolivia S.A.",
+    "db_type": "postgresql",
+    "algorithm": "vigenere",
+    "api_port": 8003
+  }
+]
