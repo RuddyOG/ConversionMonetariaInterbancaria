@@ -1,0 +1,15 @@
+services:
+  db:
+    build: .
+    container_name: banco_db
+    environment:
+      POSTGRES_DB: banco
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin123
+    ports:
+      - "5432:5432"
+    volumes:
+      - banco_data:/var/lib/postgresql/data
+
+volumes:
+  banco_data:
