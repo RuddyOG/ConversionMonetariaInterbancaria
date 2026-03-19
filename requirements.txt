@@ -4,3 +4,4 @@ pycryptodome
 pymongo
 redis
 pandas
+eciespy
