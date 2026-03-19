@@ -1,421 +1,161 @@
-import pandas as pd
+﻿from __future__ import annotations
+
 import os
-from pymongo import MongoClient
-import redis
 from datetime import datetime
-import base64
-import hashlib
-import secrets
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import rsa, padding
-from Crypto.Cipher import DES, DES3, Blowfish, AES, ChaCha20
-from Crypto.Util.Padding import pad, unpad
 
-# =========================
-# 📋 CONFIGURACIÓN DE ENCRIPTACIÓN POR BANCO
-# =========================
+import pandas as pd
+import redis
+from pymongo import MongoClient
 
-def generar_claves():
-    claves = {}
-    
-    # DES (56 bits)
-    claves['des'] = os.urandom(8)
-    
-    # 3DES (168 bits)
-    claves['3des'] = os.urandom(24)
-    
-    # Blowfish (variable, usamos 16 bytes)
-    claves['blowfish'] = os.urandom(16)
-    
-    # Twofish (usando AES como alternativa)
-    claves['twofish'] = os.urandom(32)
-    
-    # AES (256 bits)
-    claves['aes'] = os.urandom(32)
-    
-    # RSA (2048 bits)
-    claves['rsa_priv'] = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    claves['rsa_pub'] = claves['rsa_priv'].public_key()
-    
-    # ChaCha20
-    claves['chacha20'] = os.urandom(32)
-    
-    return claves
+from app.crypto.manager import CryptoManager
 
-# Generar claves globales
-print("🔑 Generando claves de encriptación...")
-CLAVES = generar_claves()
-print("✅ Claves generadas correctamente")
 
-# =========================
-# 📋 MAPEO DE BANCOS CON SUS ALGORITMOS
-# =========================
-bancos = {
-    6: {
-        "nombre_db": "banco_ganadero_db",
-        "nombre_comercial": "Banco Ganadero S.A.",
-        "algoritmo": "DES",
-        "clave": CLAVES['des']
-    },
-    7: {
-        "nombre_db": "banco_economico_db",
-        "nombre_comercial": "Banco Económico S.A.",
-        "algoritmo": "3DES",
-        "clave": CLAVES['3des']
-    },
-    8: {
-        "nombre_db": "banco_prodem_db",
-        "nombre_comercial": "Banco Prodem S.A.",
-        "algoritmo": "Blowfish",
-        "clave": CLAVES['blowfish']
-    },
-    9: {
-        "nombre_db": "banco_solidario_db",
-        "nombre_comercial": "Banco Solidario S.A.",
-        "algoritmo": "Twofish",
-        "clave": CLAVES['twofish']
-    },
-    10: {
-        "nombre_db": "banco_fortaleza_db",
-        "nombre_comercial": "Banco Fortaleza S.A.",
-        "algoritmo": "AES",
-        "clave": CLAVES['aes']
-    },
-    11: {
-        "nombre_db": "banco_fie_db",
-        "nombre_comercial": "Banco FIE S.A.",
-        "algoritmo": "RSA",
-        "clave_priv": CLAVES['rsa_priv'],
-        "clave_pub": CLAVES['rsa_pub']
-    },
-    12: {
-        "nombre_db": "banco_comunidad_db",
-        "nombre_comercial": "Banco PYME de la Comunidad S.A.",
-        "algoritmo": "AES",
-        "clave": CLAVES['aes']
-    },
-    13: {
-        "nombre_db": "banco_desarrollo_productivo_db",
-        "nombre_comercial": "Banco de Desarrollo Productivo S.A.M.",
-        "algoritmo": "AES",
-        "clave": CLAVES['aes']
-    },
-    14: {
-        "nombre_db": "banco_nacion_argentina_db",
-        "nombre_comercial": "Banco de la Nación Argentina",
-        "algoritmo": "ChaCha20",
-        "clave": CLAVES['chacha20']
-    }
+BANK_STORAGE = {
+    6: {"storage": "mongo", "db": "banco_ganadero_db", "collection": "cuentas"},
+    7: {"storage": "mongo", "db": "banco_economico_db", "collection": "cuentas"},
+    8: {"storage": "mongo", "db": "banco_prodem_db", "collection": "cuentas"},
+    9: {"storage": "mongo", "db": "banco_solidario_db", "collection": "cuentas"},
+    10: {"storage": "mongo", "db": "banco_fortaleza_db", "collection": "cuentas"},
+    11: {"storage": "mongo", "db": "banco_fie_db", "collection": "cuentas"},
+    12: {"storage": "mongo", "db": "banco_comunidad_db", "collection": "cuentas"},
+    13: {"storage": "mongo", "db": "banco_desarrollo_productivo_db", "collection": "cuentas"},
+    14: {"storage": "redis", "prefix": "bna"},
 }
 
-# =========================
-# 🔐 FUNCIONES DE ENCRIPTACIÓN
-# =========================
 
-def generar_codigo_verificacion(ci, numero_cuenta):
-    """Genera un código de verificación único"""
-    data = f"{ci}_{numero_cuenta}_{datetime.now().timestamp()}"
-    return hashlib.sha256(data.encode()).hexdigest()[:20]
+def _encrypt_record(crypto: CryptoManager, bank_id: int, ci: str, numero_cuenta: str, saldo_usd: str) -> dict:
+    plain = {
+        "id_banco": bank_id,
+        "ci": ci,
+        "numero_cuenta": numero_cuenta,
+        "saldo_usd": saldo_usd,
+        "saldo_bs": "",
+    }
+    return crypto.encrypt_sensitive_fields(plain)
 
-def generar_id_unico():
-    """Genera un ID único similar al ObjectId de MongoDB"""
-    timestamp = int(datetime.now().timestamp() * 1000)  # Timestamp en milisegundos
-    random = secrets.token_hex(8)  # 8 bytes aleatorios
-    contador = secrets.randbits(24)  # Contador aleatorio de 24 bits
-    return f"{timestamp:x}{random}{contador:x}"[:24]
 
-def encriptar_des(valor, clave):
-    """Encriptación DES"""
-    cipher = DES.new(clave[:8], DES.MODE_CBC)
-    if isinstance(valor, (int, float)):
-        texto = str(valor)
-    else:
-        texto = valor
-    texto_bytes = texto.encode()
-    padded = pad(texto_bytes, DES.block_size)
-    encriptado = cipher.iv + cipher.encrypt(padded)
-    return base64.b64encode(encriptado).decode()
+def main() -> None:
+    print("[seed_non_relational] Iniciando carga no relacional 6..14")
 
-def encriptar_3des(valor, clave):
-    """Encriptación 3DES"""
-    cipher = DES3.new(clave[:24], DES3.MODE_CBC)
-    texto = str(valor) if isinstance(valor, (int, float)) else valor
-    texto_bytes = texto.encode()
-    padded = pad(texto_bytes, DES3.block_size)
-    encriptado = cipher.iv + cipher.encrypt(padded)
-    return base64.b64encode(encriptado).decode()
+    dataset_path = os.path.join(os.path.dirname(__file__), "dataset.csv")
+    if not os.path.exists(dataset_path):
+        raise FileNotFoundError(f"No existe dataset.csv en: {dataset_path}")
 
-def encriptar_blowfish(valor, clave):
-    """Encriptación Blowfish"""
-    cipher = Blowfish.new(clave[:16], Blowfish.MODE_CBC)
-    texto = str(valor) if isinstance(valor, (int, float)) else valor
-    texto_bytes = texto.encode()
-    padded = pad(texto_bytes, Blowfish.block_size)
-    encriptado = cipher.iv + cipher.encrypt(padded)
-    return base64.b64encode(encriptado).decode()
+    mongo_uri = os.environ.get("MONGO_URI", "mongodb://localhost:27017/")
+    redis_host = os.environ.get("REDIS_HOST", "localhost")
+    redis_port = int(os.environ.get("REDIS_PORT", "6379"))
+    redis_password = os.environ.get("REDIS_PASSWORD", "redis123")
 
-def encriptar_twofish(valor, clave):
-    """Encriptación Twofish (usando AES)"""
-    texto = str(valor) if isinstance(valor, (int, float)) else valor
-    texto_bytes = texto.encode()
-    cipher = AES.new(clave[:32], AES.MODE_CBC)
-    padded = pad(texto_bytes, AES.block_size)
-    encriptado = cipher.iv + cipher.encrypt(padded)
-    return base64.b64encode(encriptado).decode()
+    df = pd.read_csv(dataset_path, dtype={"NroCuenta": str, "Identificacion": str})
+    df.columns = df.columns.str.strip()
+    sample = df.sample(frac=0.01, random_state=42)
 
-def encriptar_aes(valor, clave):
-    """Encriptación AES-256"""
-    texto = str(valor) if isinstance(valor, (int, float)) else valor
-    texto_bytes = texto.encode()
-    cipher = AES.new(clave[:32], AES.MODE_CBC)
-    padded = pad(texto_bytes, AES.block_size)
-    encriptado = cipher.iv + cipher.encrypt(padded)
-    return base64.b64encode(encriptado).decode()
+    print(f"[seed_non_relational] Total dataset: {len(df)}")
+    print(f"[seed_non_relational] Muestra 1%: {len(sample)}")
 
-def encriptar_rsa(valor, clave_publica):
-    """Encriptación RSA"""
-    texto = str(valor) if isinstance(valor, (int, float)) else valor
-    texto_bytes = texto.encode()
-    encriptado = clave_publica.encrypt(
-        texto_bytes,
-        padding.OAEP(
-            mgf=padding.MGF1(algorithm=hashes.SHA256()),
-            algorithm=hashes.SHA256(),
-            label=None
-        )
-    )
-    return base64.b64encode(encriptado).decode()
+    mongo_client = MongoClient(mongo_uri, serverSelectionTimeoutMS=5000)
+    mongo_client.admin.command("ping")
+    redis_client = redis.Redis(host=redis_host, port=redis_port, password=redis_password, decode_responses=True)
 
-def encriptar_chacha20(valor, clave):
-    """Encriptación ChaCha20"""
-    nonce = os.urandom(8)
-    cipher = ChaCha20.new(key=clave[:32], nonce=nonce)
-    texto = str(valor) if isinstance(valor, (int, float)) else valor
-    texto_bytes = texto.encode()
-    encriptado = nonce + cipher.encrypt(texto_bytes)
-    return base64.b64encode(encriptado).decode()
+    for cfg in BANK_STORAGE.values():
+        if cfg["storage"] == "mongo":
+            db_name = cfg["db"]
+            if db_name in mongo_client.list_database_names():
+                mongo_client.drop_database(db_name)
+    redis_client.flushdb()
 
-def encriptar_por_banco(banco_id, valor):
-    """Encripta un valor según el algoritmo del banco"""
-    if banco_id not in bancos:
-        return valor
-    
-    banco = bancos[banco_id]
-    algoritmo = banco["algoritmo"]
-    
-    try:
-        if algoritmo == "DES":
-            return encriptar_des(valor, banco["clave"])
-        elif algoritmo == "3DES":
-            return encriptar_3des(valor, banco["clave"])
-        elif algoritmo == "Blowfish":
-            return encriptar_blowfish(valor, banco["clave"])
-        elif algoritmo == "Twofish":
-            return encriptar_twofish(valor, banco["clave"])
-        elif algoritmo == "AES":
-            return encriptar_aes(valor, banco["clave"])
-        elif algoritmo == "RSA":
-            return encriptar_rsa(valor, banco["clave_pub"])
-        elif algoritmo == "ChaCha20":
-            return encriptar_chacha20(valor, banco["clave"])
-        else:
-            return valor
-    except Exception as e:
-        print(f"  ⚠️ Error encriptando con {algoritmo}: {e}")
-        return valor
+    crypto = CryptoManager()
+    now_iso = datetime.utcnow().isoformat()
 
-# =========================
-# 🔐 CONFIGURACIÓN PARA DOCKER LOCAL
-# =========================
+    total_mongo = 0
+    total_redis = 0
 
-MONGO_URI = "mongodb://localhost:27017/"
-redis_client = redis.Redis(host="localhost", port=6379, password="redis123", decode_responses=True)
+    for bank_id, cfg in BANK_STORAGE.items():
+        if cfg["storage"] != "mongo":
+            continue
 
-# =========================
-# 📂 LEER CSV
-# =========================
+        bank_rows = sample[sample["IdBanco"] == bank_id]
+        if len(bank_rows) == 0:
+            continue
 
-print("📂 Leyendo dataset.csv...")
-ruta = os.path.join(os.path.dirname(__file__), "dataset.csv")
+        collection = mongo_client[cfg["db"]][cfg["collection"]]
+        docs = []
 
-df = pd.read_csv(ruta, dtype={"NroCuenta": str, "Identificacion": str})
-df.columns = df.columns.str.strip()
-muestra = df.sample(frac=0.01, random_state=42)
+        for _, row in bank_rows.iterrows():
+            ci = str(row["Identificacion"])
+            numero_cuenta = str(row["NroCuenta"])
+            saldo_usd = str(row["Saldo"])
 
-print(f"Total registros: {len(df)}")
-print(f"Muestra 1%: {len(muestra)}")
+            try:
+                encrypted = _encrypt_record(crypto, bank_id, ci, numero_cuenta, saldo_usd)
+            except Exception as exc:
+                print(f"[seed_non_relational] Banco {bank_id} cuenta {numero_cuenta} omitida: {exc}")
+                continue
 
-print("\n📊 Distribución por banco:")
-print(muestra["IdBanco"].value_counts().sort_index())
-
-# =========================
-# CONEXIÓN MONGODB
-# =========================
-
-print("\n🔄 Conectando a MongoDB...")
-mongo_client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
-mongo_client.admin.command('ping')
-print("✅ Conexión exitosa")
-
-# =========================
-# 🧹 LIMPIEZA
-# =========================
-
-print("\n🧹 Limpiando datos anteriores...")
-
-for banco_id in range(6, 14):
-    if banco_id in bancos:
-        db_name = bancos[banco_id]["nombre_db"]
-        if db_name in mongo_client.list_database_names():
-            mongo_client.drop_database(db_name)
-            print(f"  ✅ Eliminada {db_name}")
-
-# Limpiar Redis
-redis_client.flushdb()
-print("  ✅ Redis limpiado")
-
-# =========================
-# 📦 INSERTAR EN MONGODB CON ENCRIPTACIÓN
-# =========================
-
-print("\n📦 Insertando en MongoDB con encriptación...")
-
-fecha_actual = datetime.now().isoformat()
-total_mongo = 0
-
-for banco_id in range(6, 14):
-    if banco_id in bancos:
-        df_banco = muestra[muestra["IdBanco"] == banco_id]
-        
-        if len(df_banco) > 0:
-            banco = bancos[banco_id]
-            db_name = banco["nombre_db"]
-            collection_name = f"cuentas_{db_name.replace('_db', '')}"
-            collection = mongo_client[db_name][collection_name]
-            
-            documentos = []
-            for _, row in df_banco.iterrows():
-                ci = str(row["Identificacion"])
-                numero_cuenta = str(row["NroCuenta"])
-                saldo_bs = float(row["Saldo"])
-                codigo_verificacion = generar_codigo_verificacion(ci, numero_cuenta)
-                
-                doc = {
-                    "ci": encriptar_por_banco(banco_id, ci),
+            docs.append(
+                {
+                    "id_banco": bank_id,
+                    "id": numero_cuenta,
+                    "ci_cipher": encrypted.get("ci", ""),
+                    "numero_cuenta_cipher": encrypted.get("numero_cuenta", ""),
+                    "saldo_usd_cipher": encrypted.get("saldo_usd", ""),
+                    "saldo_bs_cipher": encrypted.get("saldo_bs", ""),
                     "nombres": str(row["Nombres"]),
                     "apellidos": str(row["Apellidos"]),
-                    "numero_cuenta": encriptar_por_banco(banco_id, numero_cuenta),
-                    "saldo_bs": encriptar_por_banco(banco_id, saldo_bs),
-                    "saldo_usd": encriptar_por_banco(banco_id, 0.0),
-                    "codigo_verificacion": codigo_verificacion,
-                    "created_at": fecha_actual,
-                    "updated_at": fecha_actual,
-                    "created_by": "system",
-                    "updated_by": "system",
-                    "is_active": True
+                    "codigo_verificacion": "00000000",
+                    "created_at": now_iso,
+                    "updated_at": now_iso,
+                    "is_active": True,
                 }
-                documentos.append(doc)
-            
-            if documentos:
-                result = collection.insert_many(documentos)
-                collection.create_index("ci")
-                collection.create_index("numero_cuenta")
-                total_mongo += len(result.inserted_ids)
-                print(f"  ✅ {banco['nombre_comercial']} ({banco['algoritmo']}): {len(result.inserted_ids)} registros")
+            )
 
-print(f"\n📊 TOTAL MONGODB: {total_mongo} registros")
+        if docs:
+            result = collection.insert_many(docs)
+            collection.create_index("id")
+            collection.create_index("saldo_bs_cipher")
+            total_mongo += len(result.inserted_ids)
+            print(f"[seed_non_relational] Banco {bank_id} Mongo: {len(result.inserted_ids)}")
 
-# =========================
-# ⚡ INSERTAR EN REDIS CON ENCRIPTACIÓN (BANCO 14)
-# =========================
+    bank14_rows = sample[sample["IdBanco"] == 14]
+    if len(bank14_rows) > 0:
+        redis_prefix = BANK_STORAGE[14]["prefix"]
+        for _, row in bank14_rows.iterrows():
+            numero_cuenta = str(row["NroCuenta"])
+            ci = str(row["Identificacion"])
+            saldo_usd = str(row["Saldo"])
 
-print("\n⚡ Insertando en Redis con ChaCha20...")
+            try:
+                encrypted = _encrypt_record(crypto, 14, ci, numero_cuenta, saldo_usd)
+            except Exception as exc:
+                print(f"[seed_non_relational] Banco 14 cuenta {numero_cuenta} omitida: {exc}")
+                continue
 
-df_redis = muestra[muestra["IdBanco"] == 14]
-banco14 = bancos[14]
-nombre_redis = banco14["nombre_db"].replace('_db', '')
+            redis_key = f"{redis_prefix}:cuenta:{numero_cuenta}"
+            redis_client.hset(
+                redis_key,
+                mapping={
+                    "id_banco": "14",
+                    "id": numero_cuenta,
+                    "ci_cipher": encrypted.get("ci", ""),
+                    "numero_cuenta_cipher": encrypted.get("numero_cuenta", ""),
+                    "saldo_usd_cipher": encrypted.get("saldo_usd", ""),
+                    "saldo_bs_cipher": encrypted.get("saldo_bs", ""),
+                    "nombres": str(row["Nombres"]),
+                    "apellidos": str(row["Apellidos"]),
+                    "codigo_verificacion": "00000000",
+                    "created_at": now_iso,
+                    "updated_at": now_iso,
+                    "is_active": "1",
+                },
+            )
+            redis_client.sadd(f"{redis_prefix}:cuentas", numero_cuenta)
+            total_redis += 1
 
-if len(df_redis) > 0:
-    contador = 0
-    for _, row in df_redis.iterrows():
-        cuenta = str(row["NroCuenta"])
-        ci = str(row["Identificacion"])
-        saldo_bs = float(row["Saldo"])
-        codigo_verificacion = generar_codigo_verificacion(ci, cuenta)
-        id_unico = generar_id_unico()  # 👈 Generamos ID único para Redis
-        
-        redis_client.hset(f"{nombre_redis}:cuenta:{cuenta}", mapping={
-            "id": id_unico,  # 👈 NUEVO CAMPO ID
-            "ci": encriptar_chacha20(ci, banco14["clave"]),
-            "nombres": str(row["Nombres"]),
-            "apellidos": str(row["Apellidos"]),
-            "numero_cuenta": encriptar_chacha20(cuenta, banco14["clave"]),
-            "saldo_bs": encriptar_chacha20(saldo_bs, banco14["clave"]),
-            "saldo_usd": encriptar_chacha20(0.0, banco14["clave"]),
-            "codigo_verificacion": codigo_verificacion,
-            "created_at": fecha_actual,
-            "updated_at": fecha_actual,
-            "created_by": "system",
-            "updated_by": "system",
-            "is_active": "1"
-        })
-        redis_client.sadd(f"{nombre_redis}:cuentas", cuenta)
-        contador += 1
-    
-    print(f"  ✅ {banco14['nombre_comercial']}: {contador} registros (con IDs únicos)")
+        print(f"[seed_non_relational] Banco 14 Redis: {total_redis}")
 
-# =========================
-# 🔍 VALIDACIÓN
-# =========================
+    print(f"[seed_non_relational] OK Mongo total: {total_mongo}")
+    print(f"[seed_non_relational] OK Redis total: {total_redis}")
 
-print("\n" + "="*70)
-print("🔍 VALIDACIÓN FINAL")
-print("="*70)
 
-print("\n📊 MONGODB:")
-for banco_id in range(6, 14):
-    if banco_id in bancos:
-        try:
-            db_name = bancos[banco_id]["nombre_db"]
-            collection_name = f"cuentas_{db_name.replace('_db', '')}"
-            
-            if db_name in mongo_client.list_database_names():
-                count = mongo_client[db_name][collection_name].count_documents({})
-                print(f"  ✅ {bancos[banco_id]['nombre_comercial']} ({bancos[banco_id]['algoritmo']}): {count} registros")
-                
-                # Mostrar un ejemplo del primer banco
-                if banco_id == 6:
-                    ejemplo = mongo_client[db_name][collection_name].find_one()
-                    print(f"\n  📝 Ejemplo {bancos[banco_id]['nombre_comercial']} (MongoDB):")
-                    print(f"      _id: {ejemplo.get('_id')} (automático)")
-                    print(f"      ci: {ejemplo.get('ci')[:30]}... (encriptado)")
-                    print(f"      nombres: {ejemplo.get('nombres')}")
-                    print(f"      numero_cuenta: {ejemplo.get('numero_cuenta')[:30]}... (encriptado)")
-                    print(f"      codigo_verificacion: {ejemplo.get('codigo_verificacion')}")
-        except:
-            pass
-
-print("\n⚡ REDIS:")
-try:
-    cuentas_redis = redis_client.scard(f"{nombre_redis}:cuentas")
-    print(f"  ✅ {banco14['nombre_comercial']} (ChaCha20): {cuentas_redis} cuentas")
-    
-    if cuentas_redis > 0:
-        # Mostrar un ejemplo de Redis
-        ejemplo_cuenta = redis_client.srandmember(f"{nombre_redis}:cuentas")
-        if ejemplo_cuenta:
-            ejemplo_data = redis_client.hgetall(f"{nombre_redis}:cuenta:{ejemplo_cuenta}")
-            print(f"\n  📝 Ejemplo {banco14['nombre_comercial']} (Redis):")
-            print(f"      id: {ejemplo_data.get('id')} (generado manualmente)")  # 👈 Mostramos el ID
-            print(f"      ci: {ejemplo_data.get('ci')[:30]}... (encriptado)")
-            print(f"      nombres: {ejemplo_data.get('nombres')}")
-            print(f"      numero_cuenta: {ejemplo_data.get('numero_cuenta')[:30]}... (encriptado)")
-            print(f"      codigo_verificacion: {ejemplo_data.get('codigo_verificacion')}")
-    
-except Exception as e:
-    print(f"  ❌ Error en Redis: {e}")
-
-print("\n" + "="*70)
-print("🚀 PROCESO COMPLETADO CON ENCRIPTACIÓN")
-print("="*70)
+if __name__ == "__main__":
+    main()
