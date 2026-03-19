@@ -5,3 +5,8 @@ pymongo
 redis
 pandas
 eciespy
+fastapi
+uvicorn
+httpx
+psycopg[binary]
+mysql-connector-python
