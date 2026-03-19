@@ -1,3 +1,7 @@
 python-dotenv
 cryptography
 pycryptodome
+pymongo
+redis
+pandas
+eciespy
