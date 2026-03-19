@@ -1,15 +1,89 @@
 services:
-  db:
-    build: .
-    container_name: banco_db
+  db_union_pg:
+    image: postgres:16
+    container_name: db_union_pg
     environment:
-      POSTGRES_DB: banco
+      POSTGRES_DB: banco_union
       POSTGRES_USER: admin
-      POSTGRES_PASSWORD: admin123
+      POSTGRES_PASSWORD: union123
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
-      - banco_data:/var/lib/postgresql/data
+      - ./banco_union/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+      - union_data:/var/lib/postgresql/data
+
+  db_mercantil_mysql:
+    image: mysql:8.0
+    container_name: db_mercantil_mysql
+    environment:
+      MYSQL_DATABASE: banco_mercantil
+      MYSQL_USER: admin
+      MYSQL_PASSWORD: mercantil123
+      MYSQL_ROOT_PASSWORD: root123
+    ports:
+      - "3307:3306"
+    volumes:
+      - ./banco_mercantil/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+      - mercantil_data:/var/lib/mysql
+
+  db_bnb_mariadb:
+    image: mariadb:11
+    container_name: db_bnb_mariadb
+    environment:
+      MARIADB_DATABASE: banco_bnb
+      MARIADB_USER: admin
+      MARIADB_PASSWORD: bnb123
+      MARIADB_ROOT_PASSWORD: root123
+    ports:
+      - "3308:3306"
+    volumes:
+      - ./banco_bnb/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+      - bnb_data:/var/lib/mysql
+
+  db_bcp_pg:
+    image: postgres:16
+    container_name: db_bcp_pg
+    environment:
+      POSTGRES_DB: banco_bcp
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: bcp123
+    ports:
+      - "5434:5432"
+    volumes:
+      - ./banco_bcp/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+      - bcp_data:/var/lib/postgresql/data
+
+  db_bisa_mysql:
+    image: mysql:8.0
+    container_name: db_bisa_mysql
+    environment:
+      MYSQL_DATABASE: banco_bisa
+      MYSQL_USER: admin
+      MYSQL_PASSWORD: bisa123
+      MYSQL_ROOT_PASSWORD: root123
+    ports:
+      - "3309:3306"
+    volumes:
+      - ./banco_bisa/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+      - bisa_data:/var/lib/mysql
+
+  db_asfi_pg:
+    image: postgres:16
+    container_name: db_asfi_pg
+    environment:
+      POSTGRES_DB: asfi_central
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: asfi123
+    ports:
+      - "5435:5432"
+    volumes:
+      - ./asfi_central/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+      - asfi_data:/var/lib/postgresql/data
 
 volumes:
-  banco_data:
+  union_data:
+  mercantil_data:
+  bnb_data:
+  bcp_data:
+  bisa_data:
+  asfi_data:
