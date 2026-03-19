@@ -4,3 +4,8 @@ pycryptodome
 pymongo
 redis
 pandas
+fastapi
+uvicorn
+httpx
+"psycopg[binary]"
+mysql-connector-python
