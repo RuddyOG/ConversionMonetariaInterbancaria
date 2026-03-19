@@ -108,6 +108,38 @@ def _connect(cfg: DbConfig):
     return _connect_mysql(cfg)
 
 
+def _has_relational_column(conn, cfg: DbConfig, table_name: str, column_name: str) -> bool:
+    if cfg.engine == "postgres":
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT 1
+                FROM information_schema.columns
+                WHERE table_name = %s AND column_name = %s
+                LIMIT 1
+                """,
+                (table_name, column_name),
+            )
+            return cur.fetchone() is not None
+
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_schema = DATABASE()
+              AND table_name = %s
+              AND column_name = %s
+            LIMIT 1
+            """,
+            (table_name, column_name),
+        )
+        return cur.fetchone() is not None
+    finally:
+        cur.close()
+
+
 def _truncate_asfi_central() -> None:
     conn = _connect_postgres(ASFI_CENTRAL)
     try:
@@ -186,20 +218,33 @@ def _fetch_bank_row(bank_id: int, cuenta_id: str) -> Optional[Dict[str, Any]]:
         cfg = RELATIONAL_BANKS_1_TO_5[bank_id]
         conn = _connect(cfg)
         try:
+            has_cipher_schema = _has_relational_column(conn, cfg, "cuentas_banco", "saldo_bs_cipher")
             if cfg.engine == "postgres":
                 with conn.cursor() as cur:
-                    cur.execute(
-                        "SELECT id, saldo_bs_cipher, codigo_verificacion FROM cuentas_banco WHERE id = %s",
-                        (int(cuenta_id),),
-                    )
+                    if has_cipher_schema:
+                        cur.execute(
+                            "SELECT id, saldo_bs_cipher, codigo_verificacion FROM cuentas_banco WHERE id = %s",
+                            (int(cuenta_id),),
+                        )
+                    else:
+                        cur.execute(
+                            "SELECT id, saldo_bs AS saldo_bs_cipher, codigo_verificacion FROM cuentas_banco WHERE id = %s",
+                            (int(cuenta_id),),
+                        )
                     row = cur.fetchone()
             else:
                 cur = conn.cursor()
                 try:
-                    cur.execute(
-                        "SELECT id, saldo_bs_cipher, codigo_verificacion FROM cuentas_banco WHERE id = %s",
-                        (int(cuenta_id),),
-                    )
+                    if has_cipher_schema:
+                        cur.execute(
+                            "SELECT id, saldo_bs_cipher, codigo_verificacion FROM cuentas_banco WHERE id = %s",
+                            (int(cuenta_id),),
+                        )
+                    else:
+                        cur.execute(
+                            "SELECT id, saldo_bs AS saldo_bs_cipher, codigo_verificacion FROM cuentas_banco WHERE id = %s",
+                            (int(cuenta_id),),
+                        )
                     row = cur.fetchone()
                 finally:
                     cur.close()

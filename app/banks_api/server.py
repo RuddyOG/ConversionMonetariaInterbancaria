@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
@@ -88,6 +88,38 @@ def _connect_relational(cfg: DbConfig):
     )
 
 
+def _has_relational_column(conn, cfg: DbConfig, table_name: str, column_name: str) -> bool:
+    if cfg.engine == "postgres":
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT 1
+                FROM information_schema.columns
+                WHERE table_name = %s AND column_name = %s
+                LIMIT 1
+                """,
+                (table_name, column_name),
+            )
+            return cur.fetchone() is not None
+
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_schema = DATABASE()
+              AND table_name = %s
+              AND column_name = %s
+            LIMIT 1
+            """,
+            (table_name, column_name),
+        )
+        return cur.fetchone() is not None
+    finally:
+        cur.close()
+
+
 def _fetch_relational_pending(bank_id: int, limit: int) -> List[Dict[str, Any]]:
     cfg = _get_relational_cfg(bank_id)
     if cfg is None:
@@ -95,36 +127,78 @@ def _fetch_relational_pending(bank_id: int, limit: int) -> List[Dict[str, Any]]:
 
     conn = _connect_relational(cfg)
     try:
+        has_cipher_schema = _has_relational_column(conn, cfg, "cuentas_banco", "ci_cipher")
+
         if cfg.engine == "postgres":
             with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    SELECT id, ci_cipher, nombres_cipher, apellidos_cipher,
-                           numero_cuenta_cipher, tipo_cuenta_cipher,
-                           saldo_usd_cipher, saldo_bs_cipher, codigo_verificacion
-                    FROM cuentas_banco
-                    WHERE saldo_bs_cipher IS NULL OR saldo_bs_cipher = ''
-                    ORDER BY id
-                    LIMIT %s
-                    """,
-                    (limit,),
-                )
+                if has_cipher_schema:
+                    cur.execute(
+                        """
+                        SELECT id, ci_cipher, nombres_cipher, apellidos_cipher,
+                               numero_cuenta_cipher, tipo_cuenta_cipher,
+                               saldo_usd_cipher, saldo_bs_cipher, codigo_verificacion
+                        FROM cuentas_banco
+                        WHERE saldo_bs_cipher IS NULL OR saldo_bs_cipher = ''
+                        ORDER BY id
+                        LIMIT %s
+                        """,
+                        (limit,),
+                    )
+                else:
+                    cur.execute(
+                        """
+                        SELECT id,
+                               ci AS ci_cipher,
+                               nombres AS nombres_cipher,
+                               apellidos AS apellidos_cipher,
+                               numero_cuenta AS numero_cuenta_cipher,
+                               '' AS tipo_cuenta_cipher,
+                               saldo_usd AS saldo_usd_cipher,
+                               saldo_bs AS saldo_bs_cipher,
+                               codigo_verificacion
+                        FROM cuentas_banco
+                        WHERE saldo_bs IS NULL OR saldo_bs = ''
+                        ORDER BY id
+                        LIMIT %s
+                        """,
+                        (limit,),
+                    )
                 rows = cur.fetchall()
         else:
             cur = conn.cursor()
             try:
-                cur.execute(
-                    """
-                    SELECT id, ci_cipher, nombres_cipher, apellidos_cipher,
-                           numero_cuenta_cipher, tipo_cuenta_cipher,
-                           saldo_usd_cipher, saldo_bs_cipher, codigo_verificacion
-                    FROM cuentas_banco
-                    WHERE saldo_bs_cipher IS NULL OR saldo_bs_cipher = ''
-                    ORDER BY id
-                    LIMIT %s
-                    """,
-                    (limit,),
-                )
+                if has_cipher_schema:
+                    cur.execute(
+                        """
+                        SELECT id, ci_cipher, nombres_cipher, apellidos_cipher,
+                               numero_cuenta_cipher, tipo_cuenta_cipher,
+                               saldo_usd_cipher, saldo_bs_cipher, codigo_verificacion
+                        FROM cuentas_banco
+                        WHERE saldo_bs_cipher IS NULL OR saldo_bs_cipher = ''
+                        ORDER BY id
+                        LIMIT %s
+                        """,
+                        (limit,),
+                    )
+                else:
+                    cur.execute(
+                        """
+                        SELECT id,
+                               ci AS ci_cipher,
+                               nombres AS nombres_cipher,
+                               apellidos AS apellidos_cipher,
+                               numero_cuenta AS numero_cuenta_cipher,
+                               '' AS tipo_cuenta_cipher,
+                               saldo_usd AS saldo_usd_cipher,
+                               saldo_bs AS saldo_bs_cipher,
+                               codigo_verificacion
+                        FROM cuentas_banco
+                        WHERE saldo_bs IS NULL OR saldo_bs = ''
+                        ORDER BY id
+                        LIMIT %s
+                        """,
+                        (limit,),
+                    )
                 rows = cur.fetchall()
             finally:
                 cur.close()
@@ -219,8 +293,37 @@ def _update_relational(bank_id: int, cuenta_id: str, saldo_bs_cipher: str, codig
 
     conn = _connect_relational(cfg)
     try:
+        has_cipher_schema = _has_relational_column(conn, cfg, "cuentas_banco", "saldo_bs_cipher")
+
         if cfg.engine == "postgres":
             with conn.cursor() as cur:
+                if has_cipher_schema:
+                    cur.execute(
+                        """
+                        UPDATE cuentas_banco
+                        SET saldo_bs_cipher = %s,
+                            codigo_verificacion = %s
+                        WHERE id = %s
+                        """,
+                        (saldo_bs_cipher, codigo_verificacion, int(cuenta_id)),
+                    )
+                else:
+                    cur.execute(
+                        """
+                        UPDATE cuentas_banco
+                        SET saldo_bs = %s,
+                            codigo_verificacion = %s
+                        WHERE id = %s
+                        """,
+                        (saldo_bs_cipher, codigo_verificacion, int(cuenta_id)),
+                    )
+                updated = cur.rowcount
+            conn.commit()
+            return updated > 0
+
+        cur = conn.cursor()
+        try:
+            if has_cipher_schema:
                 cur.execute(
                     """
                     UPDATE cuentas_banco
@@ -230,21 +333,16 @@ def _update_relational(bank_id: int, cuenta_id: str, saldo_bs_cipher: str, codig
                     """,
                     (saldo_bs_cipher, codigo_verificacion, int(cuenta_id)),
                 )
-                updated = cur.rowcount
-            conn.commit()
-            return updated > 0
-
-        cur = conn.cursor()
-        try:
-            cur.execute(
-                """
-                UPDATE cuentas_banco
-                SET saldo_bs_cipher = %s,
-                    codigo_verificacion = %s
-                WHERE id = %s
-                """,
-                (saldo_bs_cipher, codigo_verificacion, int(cuenta_id)),
-            )
+            else:
+                cur.execute(
+                    """
+                    UPDATE cuentas_banco
+                    SET saldo_bs = %s,
+                        codigo_verificacion = %s
+                    WHERE id = %s
+                    """,
+                    (saldo_bs_cipher, codigo_verificacion, int(cuenta_id)),
+                )
             updated = cur.rowcount
             conn.commit()
             return updated > 0
