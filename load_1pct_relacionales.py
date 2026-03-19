@@ -280,12 +280,12 @@ def main():
                 saldo = row.get("Saldo", "0")
 
                 bank_record = {
-                    "ci": str(identificacion),
+                    "ci": encrypt(str(identificacion)),
                     "nombres": str(nombres),
                     "apellidos": str(apellidos),
-                    "numero_cuenta": str(nro_cuenta),
-                    "saldo_usd": str(saldo),
-                    "saldo_bs": "",
+                    "numero_cuenta": encrypt(str(nro_cuenta)),
+                    "saldo_usd": encrypt(str(saldo)),
+                    "saldo_bs": encrypt(""),
                     "codigo_verificacion": codigo,
                     "created_at": now,
                     "updated_at": now,
