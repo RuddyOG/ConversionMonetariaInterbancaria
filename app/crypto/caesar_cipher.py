@@ -1,31 +1,19 @@
-ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-"
-ALPHABET_INDEX = {char: idx for idx, char in enumerate(ALPHABET)}
-ALPHABET_LEN = len(ALPHABET)
+HEX_ALPHABET = "0123456789ABCDEF"
 
 
-def encrypt(value: str, key: int) -> str:
-    value = value.upper()
-    result = []
-
-    for char in value:
-        if char in ALPHABET_INDEX:
-            new_index = (ALPHABET_INDEX[char] + key) % ALPHABET_LEN
-            result.append(ALPHABET[new_index])
-        else:
-            result.append(char)
-
-    return "".join(result)
+def _to_hex_text(value: str) -> str:
+    return str(value).encode("utf-8").hex().upper()
 
 
-def decrypt(value: str, key: int) -> str:
-    value = value.upper()
-    result = []
+def _from_hex_text(value: str) -> str:
+    return bytes.fromhex(value).decode("utf-8")
 
-    for char in value:
-        if char in ALPHABET_INDEX:
-            new_index = (ALPHABET_INDEX[char] - key) % ALPHABET_LEN
-            result.append(ALPHABET[new_index])
-        else:
-            result.append(char)
 
-    return "".join(result)
+def encrypt(value: str, key: int = 3) -> str:
+    source = _to_hex_text(value)
+    return "".join(HEX_ALPHABET[(HEX_ALPHABET.index(ch) + key) % 16] for ch in source)
+
+
+def decrypt(value: str, key: int = 3) -> str:
+    decoded_hex = "".join(HEX_ALPHABET[(HEX_ALPHABET.index(ch) - key) % 16] for ch in value.upper())
+    return _from_hex_text(decoded_hex)

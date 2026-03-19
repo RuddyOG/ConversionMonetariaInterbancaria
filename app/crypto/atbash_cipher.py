@@ -1,14 +1,19 @@
-ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-"
-REVERSED_ALPHABET = ALPHABET[::-1]
-MAP = {a: b for a, b in zip(ALPHABET, REVERSED_ALPHABET)}
-REVERSE_MAP = {b: a for a, b in zip(ALPHABET, REVERSED_ALPHABET)}
+HEX_ALPHABET = "0123456789ABCDEF"
+
+
+def _to_hex_text(value: str) -> str:
+    return str(value).encode("utf-8").hex().upper()
+
+
+def _from_hex_text(value: str) -> str:
+    return bytes.fromhex(value).decode("utf-8")
 
 
 def encrypt(value: str, key=None) -> str:
-    value = value.upper()
-    return "".join(MAP.get(char, char) for char in value)
+    source = _to_hex_text(value)
+    return "".join(HEX_ALPHABET[15 - HEX_ALPHABET.index(ch)] for ch in source)
 
 
 def decrypt(value: str, key=None) -> str:
-    value = value.upper()
-    return "".join(REVERSE_MAP.get(char, char) for char in value)
+    decoded_hex = "".join(HEX_ALPHABET[15 - HEX_ALPHABET.index(ch)] for ch in value.upper())
+    return _from_hex_text(decoded_hex)

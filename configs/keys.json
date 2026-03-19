@@ -14,19 +14,19 @@
     "signature_key": "mercantil_signature_2026"
   },
   "3": {
-    "bank_name": "Banco Nacional de Bolivia S.A. (BNB)",
-    "algorithm": "vigenere",
-    "encryption_key": "BNBCLAVE",
-    "hmac_key": "bnb_hmac_2026_secure",
-    "signature_key": "bnb_signature_2026"
-  },
+  "bank_name": "Banco Nacional de Bolivia S.A. (BNB)",
+  "algorithm": "vigenere",
+  "encryption_key": "B0A1",
+  "hmac_key": "bnb_hmac_2026_secure",
+  "signature_key": "bnb_signature_2026"
+},
   "4": {
-    "bank_name": "Banco de Crédito de Bolivia S.A. (BCP)",
-    "algorithm": "playfair",
-    "encryption_key": "SEGURIDADBCP",
-    "hmac_key": "bcp_hmac_2026_secure",
-    "signature_key": "bcp_signature_2026"
-  },
+  "bank_name": "Banco de Crédito de Bolivia S.A. (BCP)",
+  "algorithm": "playfair",
+  "encryption_key": "BCP2026",
+  "hmac_key": "bcp_hmac_2026_secure",
+  "signature_key": "bcp_signature_2026"
+},
   "5": {
     "bank_name": "Banco BISA S.A.",
     "algorithm": "hill",
@@ -56,12 +56,12 @@
     "signature_key": "prodem_signature_2026"
   },
   "9": {
-    "bank_name": "Banco Solidario S.A.",
-    "algorithm": "twofish",
-    "encryption_key": "SOLIDARIOTWOFISHKEY",
-    "hmac_key": "solidario_hmac_2026_secure",
-    "signature_key": "solidario_signature_2026"
-  },
+  "bank_name": "Banco Solidario S.A.",
+  "algorithm": "aes",
+  "encryption_key": "SOLIDARIOTWOFISHKEY",
+  "hmac_key": "solidario_hmac_2026_secure",
+  "signature_key": "solidario_signature_2026"
+},
   "10": {
     "bank_name": "Banco Fortaleza S.A.",
     "algorithm": "aes",
@@ -70,26 +70,29 @@
     "signature_key": "fortaleza_signature_2026"
   },
   "11": {
-    "bank_name": "Banco FIE S.A.",
-    "algorithm": "rsa",
-    "encryption_key": "RSA_BANK_11_PLACEHOLDER",
-    "hmac_key": "fie_hmac_2026_secure",
-    "signature_key": "fie_signature_2026"
+  "bank_name": "Banco FIE S.A.",
+  "algorithm": "rsa",
+  "encryption_key": {
+    "public_key": "-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----",
+    "private_key": "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
   },
+  "hmac_key": "fie_hmac_2026_secure",
+  "signature_key": "fie_signature_2026"
+},
   "12": {
-    "bank_name": "Banco PYME de la Comunidad S.A.",
-    "algorithm": "elgamal",
-    "encryption_key": "ELGAMAL_BANK_12_PLACEHOLDER",
-    "hmac_key": "comunidad_hmac_2026_secure",
-    "signature_key": "comunidad_signature_2026"
-  },
-  "13": {
-    "bank_name": "Banco de Desarrollo Productivo S.A.M.",
-    "algorithm": "ecc",
-    "encryption_key": "ECC_BANK_13_PLACEHOLDER",
-    "hmac_key": "bdp_hmac_2026_secure",
-    "signature_key": "bdp_signature_2026"
-  },
+  "bank_name": "Banco PYME de la Comunidad S.A.",
+  "algorithm": "aes",
+  "encryption_key": "COMUNIDADAESKEY1234567890",
+  "hmac_key": "comunidad_hmac_2026_secure",
+  "signature_key": "comunidad_signature_2026"
+},
+"13": {
+  "bank_name": "Banco de Desarrollo Productivo S.A.M.",
+  "algorithm": "aes",
+  "encryption_key": "BDPAESKEY1234567890SECURE",
+  "hmac_key": "bdp_hmac_2026_secure",
+  "signature_key": "bdp_signature_2026"
+},
   "14": {
     "bank_name": "Banco de la Nación Argentina",
     "algorithm": "chacha20",

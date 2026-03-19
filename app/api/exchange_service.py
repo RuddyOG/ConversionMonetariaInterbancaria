@@ -1,0 +1,1 @@
+#Aqui va el servicio que genera el tipo de cambio cada 3 minutos lo cual puede ser variable dependiendo de la cantidad de peticiones que se hagan al servicio, ademas de manejar la logica de negocio para la conversion monetaria interbancaria

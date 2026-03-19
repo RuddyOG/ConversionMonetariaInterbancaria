@@ -1,53 +1,43 @@
-ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-"
-ALPHABET_INDEX = {char: idx for idx, char in enumerate(ALPHABET)}
-ALPHABET_LEN = len(ALPHABET)
+HEX_ALPHABET = "0123456789ABCDEF"
 
 
-def _extend_key(text: str, key: str) -> str:
-    key = key.upper()
-    filtered = [char for char in text.upper() if char in ALPHABET_INDEX]
+def _to_hex_text(value: str) -> str:
+    return str(value).encode("utf-8").hex().upper()
 
-    repeated_key = []
-    key_index = 0
 
-    for _ in filtered:
-        repeated_key.append(key[key_index % len(key)])
-        key_index += 1
+def _from_hex_text(value: str) -> str:
+    return bytes.fromhex(value).decode("utf-8")
 
-    return "".join(repeated_key)
+
+def _normalize_key(key: str) -> str:
+    key = str(key).upper()
+    normalized = "".join(ch for ch in key if ch in HEX_ALPHABET)
+    if not normalized:
+        raise ValueError("La llave Vigenere debe contener al menos un carácter hexadecimal válido.")
+    return normalized
 
 
 def encrypt(value: str, key: str) -> str:
-    value = value.upper()
-    extended_key = _extend_key(value, key)
-    result = []
-    key_pos = 0
+    source = _to_hex_text(value)
+    key = _normalize_key(key)
 
-    for char in value:
-        if char in ALPHABET_INDEX:
-            shift = ALPHABET_INDEX[extended_key[key_pos]]
-            new_index = (ALPHABET_INDEX[char] + shift) % ALPHABET_LEN
-            result.append(ALPHABET[new_index])
-            key_pos += 1
-        else:
-            result.append(char)
+    out = []
+    for i, ch in enumerate(source):
+        p = HEX_ALPHABET.index(ch)
+        k = HEX_ALPHABET.index(key[i % len(key)])
+        out.append(HEX_ALPHABET[(p + k) % 16])
 
-    return "".join(result)
+    return "".join(out)
 
 
 def decrypt(value: str, key: str) -> str:
+    key = _normalize_key(key)
     value = value.upper()
-    extended_key = _extend_key(value, key)
-    result = []
-    key_pos = 0
 
-    for char in value:
-        if char in ALPHABET_INDEX:
-            shift = ALPHABET_INDEX[extended_key[key_pos]]
-            new_index = (ALPHABET_INDEX[char] - shift) % ALPHABET_LEN
-            result.append(ALPHABET[new_index])
-            key_pos += 1
-        else:
-            result.append(char)
+    decoded_hex = []
+    for i, ch in enumerate(value):
+        p = HEX_ALPHABET.index(ch)
+        k = HEX_ALPHABET.index(key[i % len(key)])
+        decoded_hex.append(HEX_ALPHABET[(p - k) % 16])
 
-    return "".join(result)
+    return _from_hex_text("".join(decoded_hex))
