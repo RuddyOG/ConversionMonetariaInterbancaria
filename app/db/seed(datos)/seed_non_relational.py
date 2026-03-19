@@ -5,35 +5,30 @@ import redis
 from datetime import datetime
 import base64
 import hashlib
-from cryptography.fernet import Fernet
+import secrets
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from Crypto.Cipher import DES, DES3, Blowfish, AES, ChaCha20
 from Crypto.Util.Padding import pad, unpad
-import ecies
-from ecies.utils import generate_eth_key
-from ecies import encrypt, decrypt
-import os
 
 # =========================
 # 📋 CONFIGURACIÓN DE ENCRIPTACIÓN POR BANCO
 # =========================
 
-# Generar claves para cada algoritmo
 def generar_claves():
     claves = {}
     
     # DES (56 bits)
-    claves['des'] = os.urandom(8)  # 8 bytes para DES
+    claves['des'] = os.urandom(8)
     
     # 3DES (168 bits)
-    claves['3des'] = os.urandom(24)  # 24 bytes para 3DES
+    claves['3des'] = os.urandom(24)
     
     # Blowfish (variable, usamos 16 bytes)
     claves['blowfish'] = os.urandom(16)
     
-    # Twofish (256 bits)
+    # Twofish (usando AES como alternativa)
     claves['twofish'] = os.urandom(32)
     
     # AES (256 bits)
@@ -43,23 +38,15 @@ def generar_claves():
     claves['rsa_priv'] = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     claves['rsa_pub'] = claves['rsa_priv'].public_key()
     
-    # ElGamal (usamos ECIES como alternativa moderna)
-    eth_key = generate_eth_key()
-    claves['elgamal_priv'] = eth_key.to_hex()
-    claves['elgamal_pub'] = eth_key.public_key.to_hex()
-    
-    # ECC (usamos ECIES)
-    ecc_key = generate_eth_key()
-    claves['ecc_priv'] = ecc_key.to_hex()
-    claves['ecc_pub'] = ecc_key.public_key.to_hex()
-    
     # ChaCha20
     claves['chacha20'] = os.urandom(32)
     
     return claves
 
 # Generar claves globales
+print("🔑 Generando claves de encriptación...")
 CLAVES = generar_claves()
+print("✅ Claves generadas correctamente")
 
 # =========================
 # 📋 MAPEO DE BANCOS CON SUS ALGORITMOS
@@ -105,16 +92,14 @@ bancos = {
     12: {
         "nombre_db": "banco_comunidad_db",
         "nombre_comercial": "Banco PYME de la Comunidad S.A.",
-        "algoritmo": "ElGamal",
-        "clave_priv": CLAVES['elgamal_priv'],
-        "clave_pub": CLAVES['elgamal_pub']
+        "algoritmo": "AES",  # Temporalmente usamos AES en lugar de ElGamal
+        "clave": CLAVES['aes']
     },
     13: {
         "nombre_db": "banco_desarrollo_productivo_db",
         "nombre_comercial": "Banco de Desarrollo Productivo S.A.M.",
-        "algoritmo": "ECC",
-        "clave_priv": CLAVES['ecc_priv'],
-        "clave_pub": CLAVES['ecc_pub']
+        "algoritmo": "AES",  # Temporalmente usamos AES en lugar de ECC
+        "clave": CLAVES['aes']
     },
     14: {
         "nombre_db": "banco_nacion_argentina_db",
@@ -128,50 +113,64 @@ bancos = {
 # 🔐 FUNCIONES DE ENCRIPTACIÓN
 # =========================
 
-def encriptar_des(texto, clave):
+def generar_codigo_verificacion(ci, numero_cuenta):
+    """Genera un código de verificación único"""
+    data = f"{ci}_{numero_cuenta}_{datetime.now().timestamp()}"
+    return hashlib.sha256(data.encode()).hexdigest()[:20]
+
+def encriptar_des(valor, clave):
     """Encriptación DES"""
     cipher = DES.new(clave[:8], DES.MODE_CBC)
-    texto_bytes = texto.encode() if isinstance(texto, str) else str(texto).encode()
+    # Convertir a string si es número
+    if isinstance(valor, (int, float)):
+        texto = str(valor)
+    else:
+        texto = valor
+    texto_bytes = texto.encode()
     padded = pad(texto_bytes, DES.block_size)
     encriptado = cipher.iv + cipher.encrypt(padded)
     return base64.b64encode(encriptado).decode()
 
-def encriptar_3des(texto, clave):
+def encriptar_3des(valor, clave):
     """Encriptación 3DES"""
     cipher = DES3.new(clave[:24], DES3.MODE_CBC)
-    texto_bytes = texto.encode() if isinstance(texto, str) else str(texto).encode()
+    texto = str(valor) if isinstance(valor, (int, float)) else valor
+    texto_bytes = texto.encode()
     padded = pad(texto_bytes, DES3.block_size)
     encriptado = cipher.iv + cipher.encrypt(padded)
     return base64.b64encode(encriptado).decode()
 
-def encriptar_blowfish(texto, clave):
+def encriptar_blowfish(valor, clave):
     """Encriptación Blowfish"""
     cipher = Blowfish.new(clave[:16], Blowfish.MODE_CBC)
-    texto_bytes = texto.encode() if isinstance(texto, str) else str(texto).encode()
+    texto = str(valor) if isinstance(valor, (int, float)) else valor
+    texto_bytes = texto.encode()
     padded = pad(texto_bytes, Blowfish.block_size)
     encriptado = cipher.iv + cipher.encrypt(padded)
     return base64.b64encode(encriptado).decode()
 
-def encriptar_twofish(texto, clave):
+def encriptar_twofish(valor, clave):
     """Encriptación Twofish (usando AES como alternativa)"""
-    cipher = Cipher(algorithms.AES(clave[:32]), modes.CBC(os.urandom(16)))
-    encryptor = cipher.encryptor()
-    texto_bytes = texto.encode() if isinstance(texto, str) else str(texto).encode()
-    padded = texto_bytes + b' ' * (16 - len(texto_bytes) % 16)
-    encriptado = encryptor.update(padded) + encryptor.finalize()
-    return base64.b64encode(encriptado).decode()
-
-def encriptar_aes(texto, clave):
-    """Encriptación AES-256"""
+    texto = str(valor) if isinstance(valor, (int, float)) else valor
+    texto_bytes = texto.encode()
     cipher = AES.new(clave[:32], AES.MODE_CBC)
-    texto_bytes = texto.encode() if isinstance(texto, str) else str(texto).encode()
     padded = pad(texto_bytes, AES.block_size)
     encriptado = cipher.iv + cipher.encrypt(padded)
     return base64.b64encode(encriptado).decode()
 
-def encriptar_rsa(texto, clave_publica):
+def encriptar_aes(valor, clave):
+    """Encriptación AES-256"""
+    texto = str(valor) if isinstance(valor, (int, float)) else valor
+    texto_bytes = texto.encode()
+    cipher = AES.new(clave[:32], AES.MODE_CBC)
+    padded = pad(texto_bytes, AES.block_size)
+    encriptado = cipher.iv + cipher.encrypt(padded)
+    return base64.b64encode(encriptado).decode()
+
+def encriptar_rsa(valor, clave_publica):
     """Encriptación RSA"""
-    texto_bytes = texto.encode() if isinstance(texto, str) else str(texto).encode()
+    texto = str(valor) if isinstance(valor, (int, float)) else valor
+    texto_bytes = texto.encode()
     encriptado = clave_publica.encrypt(
         texto_bytes,
         padding.OAEP(
@@ -182,23 +181,12 @@ def encriptar_rsa(texto, clave_publica):
     )
     return base64.b64encode(encriptado).decode()
 
-def encriptar_elgamal(texto, clave_publica):
-    """Encriptación ElGamal (usando ECIES)"""
-    texto_bytes = texto.encode() if isinstance(texto, str) else str(texto).encode()
-    encriptado = encrypt(clave_publica, texto_bytes)
-    return base64.b64encode(encriptado).decode()
-
-def encriptar_ecc(texto, clave_publica):
-    """Encriptación ECC (usando ECIES)"""
-    texto_bytes = texto.encode() if isinstance(texto, str) else str(texto).encode()
-    encriptado = encrypt(clave_publica, texto_bytes)
-    return base64.b64encode(encriptado).decode()
-
-def encriptar_chacha20(texto, clave):
+def encriptar_chacha20(valor, clave):
     """Encriptación ChaCha20"""
-    nonce = os.urandom(12)
+    nonce = os.urandom(8)
     cipher = ChaCha20.new(key=clave[:32], nonce=nonce)
-    texto_bytes = texto.encode() if isinstance(texto, str) else str(texto).encode()
+    texto = str(valor) if isinstance(valor, (int, float)) else valor
+    texto_bytes = texto.encode()
     encriptado = nonce + cipher.encrypt(texto_bytes)
     return base64.b64encode(encriptado).decode()
 
@@ -223,10 +211,6 @@ def encriptar_por_banco(banco_id, valor):
             return encriptar_aes(valor, banco["clave"])
         elif algoritmo == "RSA":
             return encriptar_rsa(valor, banco["clave_pub"])
-        elif algoritmo == "ElGamal":
-            return encriptar_elgamal(valor, banco["clave_pub"])
-        elif algoritmo == "ECC":
-            return encriptar_ecc(valor, banco["clave_pub"])
         elif algoritmo == "ChaCha20":
             return encriptar_chacha20(valor, banco["clave"])
         else:
@@ -306,22 +290,31 @@ for banco_id in range(6, 14):
             
             documentos = []
             for _, row in df_banco.iterrows():
-                # Encriptar campos sensibles según el algoritmo del banco
+                ci = str(row["Identificacion"])
+                numero_cuenta = str(row["NroCuenta"])
+                saldo_bs = float(row["Saldo"])
+                codigo_verificacion = generar_codigo_verificacion(ci, numero_cuenta)
+                
                 doc = {
-                    "ci": encriptar_por_banco(banco_id, str(row["Identificacion"])),
-                    "nombres": encriptar_por_banco(banco_id, str(row["Nombres"])),
-                    "apellidos": encriptar_por_banco(banco_id, str(row["Apellidos"])),
-                    "nro_cuenta": encriptar_por_banco(banco_id, str(row["NroCuenta"])),
-                    "saldo_bolivianos": float(row["Saldo"]),  # No encriptamos saldos
-                    "saldo_dolares": 0.0,
-                    "algoritmo": banco["algoritmo"],
+                    "ci": encriptar_por_banco(banco_id, ci),
+                    "nombres": str(row["Nombres"]),  # Sin encriptar
+                    "apellidos": str(row["Apellidos"]),  # Sin encriptar
+                    "numero_cuenta": encriptar_por_banco(banco_id, numero_cuenta),
+                    "saldo_bs": encriptar_por_banco(banco_id, saldo_bs),
+                    "saldo_usd": encriptar_por_banco(banco_id, 0.0),
+                    "codigo_verificacion": codigo_verificacion,
                     "created_at": fecha_actual,
+                    "updated_at": fecha_actual,
+                    "created_by": "system",
+                    "updated_by": "system",
                     "is_active": True
                 }
                 documentos.append(doc)
             
             if documentos:
                 result = collection.insert_many(documentos)
+                collection.create_index("ci")
+                collection.create_index("numero_cuenta")
                 total_mongo += len(result.inserted_ids)
                 print(f"  ✅ {banco['nombre_comercial']} ({banco['algoritmo']}): {len(result.inserted_ids)} registros")
 
@@ -341,16 +334,22 @@ if len(df_redis) > 0:
     contador = 0
     for _, row in df_redis.iterrows():
         cuenta = str(row["NroCuenta"])
+        ci = str(row["Identificacion"])
+        saldo_bs = float(row["Saldo"])
+        codigo_verificacion = generar_codigo_verificacion(ci, cuenta)
         
-        # Encriptar con ChaCha20
         redis_client.hset(f"{nombre_redis}:cuenta:{cuenta}", mapping={
-            "ci": encriptar_chacha20(str(row["Identificacion"]), banco14["clave"]),
-            "nombres": encriptar_chacha20(str(row["Nombres"]), banco14["clave"]),
-            "apellidos": encriptar_chacha20(str(row["Apellidos"]), banco14["clave"]),
-            "nro_cuenta": encriptar_chacha20(cuenta, banco14["clave"]),
-            "saldo_bolivianos": str(float(row["Saldo"])),
-            "algoritmo": "ChaCha20",
+            "ci": encriptar_chacha20(ci, banco14["clave"]),
+            "nombres": str(row["Nombres"]),  # Sin encriptar
+            "apellidos": str(row["Apellidos"]),  # Sin encriptar
+            "numero_cuenta": encriptar_chacha20(cuenta, banco14["clave"]),
+            "saldo_bs": encriptar_chacha20(saldo_bs, banco14["clave"]),
+            "saldo_usd": encriptar_chacha20(0.0, banco14["clave"]),
+            "codigo_verificacion": codigo_verificacion,
             "created_at": fecha_actual,
+            "updated_at": fecha_actual,
+            "created_by": "system",
+            "updated_by": "system",
             "is_active": "1"
         })
         redis_client.sadd(f"{nombre_redis}:cuentas", cuenta)
@@ -376,12 +375,47 @@ for banco_id in range(6, 14):
             if db_name in mongo_client.list_database_names():
                 count = mongo_client[db_name][collection_name].count_documents({})
                 print(f"  ✅ {bancos[banco_id]['nombre_comercial']} ({bancos[banco_id]['algoritmo']}): {count} registros")
+                
+                # Mostrar un ejemplo del primer banco
+                if banco_id == 6:
+                    ejemplo = mongo_client[db_name][collection_name].find_one()
+                    print(f"\n  📝 Ejemplo {bancos[banco_id]['nombre_comercial']}:")
+                    print(f"      ci: {ejemplo.get('ci')[:30]}... (encriptado)")
+                    print(f"      nombres: {ejemplo.get('nombres')}")
+                    print(f"      apellidos: {ejemplo.get('apellidos')}")
+                    print(f"      numero_cuenta: {ejemplo.get('numero_cuenta')[:30]}... (encriptado)")
+                    print(f"      saldo_bs: {ejemplo.get('saldo_bs')[:30]}... (encriptado)")
+                    print(f"      saldo_usd: {ejemplo.get('saldo_usd')[:30]}... (encriptado)")
+                    print(f"      codigo_verificacion: {ejemplo.get('codigo_verificacion')}")
+                    print(f"      created_at: {ejemplo.get('created_at')}")
+                    print(f"      created_by: {ejemplo.get('created_by')}")
+                    print(f"      is_active: {ejemplo.get('is_active')}")
         except:
             pass
 
 print("\n⚡ REDIS:")
-cuentas_redis = redis_client.scard(f"{nombre_redis}:cuentas")
-print(f"  ✅ {banco14['nombre_comercial']} (ChaCha20): {cuentas_redis} cuentas")
+try:
+    cuentas_redis = redis_client.scard(f"{nombre_redis}:cuentas")
+    print(f"  ✅ {banco14['nombre_comercial']} (ChaCha20): {cuentas_redis} cuentas")
+    
+    if cuentas_redis > 0:
+        # Mostrar un ejemplo de Redis
+        ejemplo_cuenta = redis_client.srandmember(f"{nombre_redis}:cuentas")
+        if ejemplo_cuenta:
+            ejemplo_data = redis_client.hgetall(f"{nombre_redis}:cuenta:{ejemplo_cuenta}")
+            print(f"\n  📝 Ejemplo {banco14['nombre_comercial']}:")
+            print(f"      ci: {ejemplo_data.get('ci')[:30]}... (encriptado)")
+            print(f"      nombres: {ejemplo_data.get('nombres')}")
+            print(f"      apellidos: {ejemplo_data.get('apellidos')}")
+            print(f"      numero_cuenta: {ejemplo_data.get('numero_cuenta')[:30]}... (encriptado)")
+            print(f"      saldo_bs: {ejemplo_data.get('saldo_bs')[:30]}... (encriptado)")
+            print(f"      saldo_usd: {ejemplo_data.get('saldo_usd')[:30]}... (encriptado)")
+            print(f"      codigo_verificacion: {ejemplo_data.get('codigo_verificacion')}")
+            print(f"      created_at: {ejemplo_data.get('created_at')}")
+            print(f"      is_active: {ejemplo_data.get('is_active')}")
+    
+except Exception as e:
+    print(f"  ❌ Error en Redis: {e}")
 
 print("\n" + "="*70)
 print("🚀 PROCESO COMPLETADO CON ENCRIPTACIÓN")
