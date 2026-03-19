@@ -92,13 +92,13 @@ bancos = {
     12: {
         "nombre_db": "banco_comunidad_db",
         "nombre_comercial": "Banco PYME de la Comunidad S.A.",
-        "algoritmo": "AES",  # Temporalmente usamos AES en lugar de ElGamal
+        "algoritmo": "AES",
         "clave": CLAVES['aes']
     },
     13: {
         "nombre_db": "banco_desarrollo_productivo_db",
         "nombre_comercial": "Banco de Desarrollo Productivo S.A.M.",
-        "algoritmo": "AES",  # Temporalmente usamos AES en lugar de ECC
+        "algoritmo": "AES",
         "clave": CLAVES['aes']
     },
     14: {
@@ -118,10 +118,16 @@ def generar_codigo_verificacion(ci, numero_cuenta):
     data = f"{ci}_{numero_cuenta}_{datetime.now().timestamp()}"
     return hashlib.sha256(data.encode()).hexdigest()[:20]
 
+def generar_id_unico():
+    """Genera un ID único similar al ObjectId de MongoDB"""
+    timestamp = int(datetime.now().timestamp() * 1000)  # Timestamp en milisegundos
+    random = secrets.token_hex(8)  # 8 bytes aleatorios
+    contador = secrets.randbits(24)  # Contador aleatorio de 24 bits
+    return f"{timestamp:x}{random}{contador:x}"[:24]
+
 def encriptar_des(valor, clave):
     """Encriptación DES"""
     cipher = DES.new(clave[:8], DES.MODE_CBC)
-    # Convertir a string si es número
     if isinstance(valor, (int, float)):
         texto = str(valor)
     else:
@@ -150,7 +156,7 @@ def encriptar_blowfish(valor, clave):
     return base64.b64encode(encriptado).decode()
 
 def encriptar_twofish(valor, clave):
-    """Encriptación Twofish (usando AES como alternativa)"""
+    """Encriptación Twofish (usando AES)"""
     texto = str(valor) if isinstance(valor, (int, float)) else valor
     texto_bytes = texto.encode()
     cipher = AES.new(clave[:32], AES.MODE_CBC)
@@ -297,8 +303,8 @@ for banco_id in range(6, 14):
                 
                 doc = {
                     "ci": encriptar_por_banco(banco_id, ci),
-                    "nombres": str(row["Nombres"]),  # Sin encriptar
-                    "apellidos": str(row["Apellidos"]),  # Sin encriptar
+                    "nombres": str(row["Nombres"]),
+                    "apellidos": str(row["Apellidos"]),
                     "numero_cuenta": encriptar_por_banco(banco_id, numero_cuenta),
                     "saldo_bs": encriptar_por_banco(banco_id, saldo_bs),
                     "saldo_usd": encriptar_por_banco(banco_id, 0.0),
@@ -337,11 +343,13 @@ if len(df_redis) > 0:
         ci = str(row["Identificacion"])
         saldo_bs = float(row["Saldo"])
         codigo_verificacion = generar_codigo_verificacion(ci, cuenta)
+        id_unico = generar_id_unico()  # 👈 Generamos ID único para Redis
         
         redis_client.hset(f"{nombre_redis}:cuenta:{cuenta}", mapping={
+            "id": id_unico,  # 👈 NUEVO CAMPO ID
             "ci": encriptar_chacha20(ci, banco14["clave"]),
-            "nombres": str(row["Nombres"]),  # Sin encriptar
-            "apellidos": str(row["Apellidos"]),  # Sin encriptar
+            "nombres": str(row["Nombres"]),
+            "apellidos": str(row["Apellidos"]),
             "numero_cuenta": encriptar_chacha20(cuenta, banco14["clave"]),
             "saldo_bs": encriptar_chacha20(saldo_bs, banco14["clave"]),
             "saldo_usd": encriptar_chacha20(0.0, banco14["clave"]),
@@ -355,7 +363,7 @@ if len(df_redis) > 0:
         redis_client.sadd(f"{nombre_redis}:cuentas", cuenta)
         contador += 1
     
-    print(f"  ✅ {banco14['nombre_comercial']}: {contador} registros")
+    print(f"  ✅ {banco14['nombre_comercial']}: {contador} registros (con IDs únicos)")
 
 # =========================
 # 🔍 VALIDACIÓN
@@ -379,17 +387,12 @@ for banco_id in range(6, 14):
                 # Mostrar un ejemplo del primer banco
                 if banco_id == 6:
                     ejemplo = mongo_client[db_name][collection_name].find_one()
-                    print(f"\n  📝 Ejemplo {bancos[banco_id]['nombre_comercial']}:")
+                    print(f"\n  📝 Ejemplo {bancos[banco_id]['nombre_comercial']} (MongoDB):")
+                    print(f"      _id: {ejemplo.get('_id')} (automático)")
                     print(f"      ci: {ejemplo.get('ci')[:30]}... (encriptado)")
                     print(f"      nombres: {ejemplo.get('nombres')}")
-                    print(f"      apellidos: {ejemplo.get('apellidos')}")
                     print(f"      numero_cuenta: {ejemplo.get('numero_cuenta')[:30]}... (encriptado)")
-                    print(f"      saldo_bs: {ejemplo.get('saldo_bs')[:30]}... (encriptado)")
-                    print(f"      saldo_usd: {ejemplo.get('saldo_usd')[:30]}... (encriptado)")
                     print(f"      codigo_verificacion: {ejemplo.get('codigo_verificacion')}")
-                    print(f"      created_at: {ejemplo.get('created_at')}")
-                    print(f"      created_by: {ejemplo.get('created_by')}")
-                    print(f"      is_active: {ejemplo.get('is_active')}")
         except:
             pass
 
@@ -403,16 +406,12 @@ try:
         ejemplo_cuenta = redis_client.srandmember(f"{nombre_redis}:cuentas")
         if ejemplo_cuenta:
             ejemplo_data = redis_client.hgetall(f"{nombre_redis}:cuenta:{ejemplo_cuenta}")
-            print(f"\n  📝 Ejemplo {banco14['nombre_comercial']}:")
+            print(f"\n  📝 Ejemplo {banco14['nombre_comercial']} (Redis):")
+            print(f"      id: {ejemplo_data.get('id')} (generado manualmente)")  # 👈 Mostramos el ID
             print(f"      ci: {ejemplo_data.get('ci')[:30]}... (encriptado)")
             print(f"      nombres: {ejemplo_data.get('nombres')}")
-            print(f"      apellidos: {ejemplo_data.get('apellidos')}")
             print(f"      numero_cuenta: {ejemplo_data.get('numero_cuenta')[:30]}... (encriptado)")
-            print(f"      saldo_bs: {ejemplo_data.get('saldo_bs')[:30]}... (encriptado)")
-            print(f"      saldo_usd: {ejemplo_data.get('saldo_usd')[:30]}... (encriptado)")
             print(f"      codigo_verificacion: {ejemplo_data.get('codigo_verificacion')}")
-            print(f"      created_at: {ejemplo_data.get('created_at')}")
-            print(f"      is_active: {ejemplo_data.get('is_active')}")
     
 except Exception as e:
     print(f"  ❌ Error en Redis: {e}")
