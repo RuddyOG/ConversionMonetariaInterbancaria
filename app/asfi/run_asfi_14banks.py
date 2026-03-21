@@ -25,7 +25,7 @@ from app.security.verification_code import generate_verification_code
 @dataclass(frozen=True)
 class RunConfig:
     bank_api_base_url: str
-    limit_per_bank: int
+    limit_per_bank: Optional[int] = None
     truncate_asfi: bool = False
     currency_rate: str = "6.96"
     max_workers: int = 8
@@ -49,8 +49,12 @@ REDIS_PORT = 6379
 REDIS_PASSWORD = "redis123"
 
 mongo_client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
-redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, password=REDIS_PASSWORD, decode_responses=True)
-
+redis_client = redis.Redis(
+    host=REDIS_HOST,
+    port=REDIS_PORT,
+    password=REDIS_PASSWORD,
+    decode_responses=True,
+)
 
 crypto = CryptoManager()
 key_manager = KeyManager()
@@ -201,7 +205,14 @@ def _insert_into_asfi_central(
                     codigo_verificacion = EXCLUDED.codigo_verificacion,
                     updated_at = NOW()
                 """,
-                (banco_id, int(id_origen), saldo_usd_original, saldo_bs_convertido, fecha_conversion, codigo_verificacion),
+                (
+                    banco_id,
+                    int(id_origen),
+                    saldo_usd_original,
+                    saldo_bs_convertido,
+                    fecha_conversion,
+                    codigo_verificacion,
+                ),
             )
         conn.commit()
     finally:
@@ -248,9 +259,15 @@ def _fetch_bank_row(bank_id: int, cuenta_id: str) -> Optional[Dict[str, Any]]:
                     row = cur.fetchone()
                 finally:
                     cur.close()
+
             if not row:
                 return None
-            return {"id": str(row[0]), "saldo_bs_cipher": row[1], "codigo_verificacion": row[2]}
+
+            return {
+                "id": str(row[0]),
+                "saldo_bs_cipher": row[1],
+                "codigo_verificacion": row[2],
+            }
         finally:
             conn.close()
 
@@ -279,6 +296,13 @@ def _fetch_bank_row(bank_id: int, cuenta_id: str) -> Optional[Dict[str, Any]]:
     return None
 
 
+def _build_pending_payload(cfg: RunConfig, bank_id: int) -> Dict[str, Any]:
+    payload: Dict[str, Any] = {}
+    if cfg.limit_per_bank is not None:
+        payload["limit"] = cfg.limit_per_bank
+    return payload_security.secure_payload(payload, bank_id=bank_id)
+
+
 def process_bank(bank_id: int, cfg: RunConfig, audit_log_path: str) -> Tuple[int, int, int]:
     fecha_now = datetime.now(timezone.utc)
     ok = 0
@@ -287,15 +311,33 @@ def process_bank(bank_id: int, cfg: RunConfig, audit_log_path: str) -> Tuple[int
 
     with httpx.Client(timeout=60) as client:
         pending_url = f"{cfg.bank_api_base_url}/banks/{bank_id}/cuentas/pendientes"
-        secure_req = payload_security.secure_payload({"limit": cfg.limit_per_bank}, bank_id=bank_id)
+        secure_req = _build_pending_payload(cfg, bank_id)
 
         pending_resp = client.post(pending_url, json=secure_req)
         pending_resp.raise_for_status()
         cuentas = pending_resp.json().get("cuentas", [])
 
         for cuenta in cuentas:
-            cuenta_id = str(cuenta.get("id", ""))
+            cuenta_id = str(cuenta.get("id", "")).strip()
             saldo_usd_cipher = cuenta.get("saldo_usd_cipher", "")
+
+            if not cuenta_id:
+                errores += 1
+                _append_audit_row(
+                    audit_log_path,
+                    [
+                        fecha_now.isoformat(),
+                        cfg.currency_rate,
+                        bank_id,
+                        "",
+                        "",
+                        "",
+                        "",
+                        "ERR",
+                        "Cuenta sin id recibido desde API",
+                    ],
+                )
+                continue
 
             try:
                 saldo_usd_original = crypto.decrypt_field(bank_id, "saldo_usd", saldo_usd_cipher)
@@ -356,7 +398,12 @@ def process_bank(bank_id: int, cfg: RunConfig, audit_log_path: str) -> Tuple[int
                     )
                     continue
 
-                saldo_bs_from_bank = crypto.decrypt_field(bank_id, "saldo_bs", db_row.get("saldo_bs_cipher", ""))
+                saldo_bs_from_bank = crypto.decrypt_field(
+                    bank_id,
+                    "saldo_bs",
+                    db_row.get("saldo_bs_cipher", ""),
+                )
+
                 if Decimal(str(saldo_bs_from_bank)) != Decimal(str(saldo_bs_convertido)):
                     inconsistencias += 1
                     _append_audit_row(
@@ -390,6 +437,7 @@ def process_bank(bank_id: int, cfg: RunConfig, audit_log_path: str) -> Tuple[int
                         "Consistente",
                     ],
                 )
+
             except Exception as exc:
                 errores += 1
                 _append_audit_row(
@@ -411,7 +459,7 @@ def process_bank(bank_id: int, cfg: RunConfig, audit_log_path: str) -> Tuple[int
 
 
 def run(
-    limit_per_bank: int = 50,
+    limit_per_bank: Optional[int] = None,
     max_workers: int = 8,
     truncate_asfi: bool = False,
     currency_rate: str = "6.96",
@@ -429,14 +477,18 @@ def run(
 
     if cfg.truncate_asfi:
         _truncate_asfi_central()
+
     _ensure_asfi_bancos_1_to_14()
 
     bank_ids = list(range(1, 15))
     results: Dict[int, Tuple[int, int, int]] = {}
 
     with ThreadPoolExecutor(max_workers=cfg.max_workers) as executor:
-        futures = {executor.submit(process_bank, bank_id, cfg, audit_log_path): bank_id for bank_id in bank_ids}
-        for future, bank_id in futures.items():
+        future_map = {
+            executor.submit(process_bank, bank_id, cfg, audit_log_path): bank_id
+            for bank_id in bank_ids
+        }
+        for future, bank_id in future_map.items():
             results[bank_id] = future.result()
 
     print("Resumen corrida ASFI (bancos 1..14)")
@@ -446,4 +498,4 @@ def run(
 
 
 if __name__ == "__main__":
-    run()
+    run(limit_per_bank=None, truncate_asfi=True)
