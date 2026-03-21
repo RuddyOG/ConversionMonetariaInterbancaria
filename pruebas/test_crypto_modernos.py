@@ -41,6 +41,13 @@ def main():
             "saldo_bs": "0.0000",
         },
         {
+            "id_banco": 11,  # ✅ agregado correctamente
+            "ci": "55566677",
+            "numero_cuenta": "11011223344556677",
+            "saldo_usd": "777.7700",
+            "saldo_bs": "0.0000",
+        },
+        {
             "id_banco": 12,
             "ci": "14725836",
             "numero_cuenta": "12011223344556677",
@@ -81,7 +88,7 @@ def main():
         assert descifrado["saldo_usd"] == original["saldo_usd"], "Saldo USD no coincide"
         assert descifrado["saldo_bs"] == original["saldo_bs"], "Saldo Bs no coincide"
 
-    print("\n✅ Prueba modernos exitosa: cifrado/descifrado correcto en bancos 6,7,8,9,10,12,13,14.")
+    print("\n✅ Prueba exitosa: cifrado/descifrado correcto en bancos 6–14 (incluyendo 11).")
 
 
 if __name__ == "__main__":

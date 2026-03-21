@@ -9,12 +9,24 @@ BLOCK_SIZE = AES.block_size  # 16
 
 
 def _derive_key(key: str | bytes, length: int = 32) -> bytes:
-    if isinstance(key, str):
-        key = key.encode("utf-8")
-    return hashlib.sha256(key).digest()[:length]
+    """Deriva una clave de la longitud especificada usando SHA-256"""
+    # Si la clave ya es bytes, usarla directamente
+    if isinstance(key, bytes):
+        key_bytes = key
+    else:
+        # Convertir string a bytes
+        key_bytes = key.encode("utf-8")
+    
+    # Si la clave es exactamente de la longitud requerida, devolverla
+    if len(key_bytes) == length:
+        return key_bytes
+    
+    # Si no, derivar usando SHA-256
+    return hashlib.sha256(key_bytes).digest()[:length]
 
 
-def encrypt(value: str, key: str) -> str:
+def encrypt(value: str, key: str | bytes) -> str:
+    """Encripta un valor usando AES-256 en modo CBC"""
     plaintext = str(value).encode("utf-8")
     aes_key = _derive_key(key, 32)
 
@@ -25,7 +37,8 @@ def encrypt(value: str, key: str) -> str:
     return base64.b64encode(payload).decode("utf-8")
 
 
-def decrypt(value: str, key: str) -> str:
+def decrypt(value: str, key: str | bytes) -> str:
+    """Descifra un valor usando AES-256 en modo CBC"""
     raw = base64.b64decode(value)
     aes_key = _derive_key(key, 32)
 
