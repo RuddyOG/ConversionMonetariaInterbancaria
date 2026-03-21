@@ -136,11 +136,21 @@ def encriptar_por_banco(banco_id, valor):
 def main():
     print("🚀 Iniciando carga...")
 
-    df = pd.read_csv("dataset.csv")
+    from pathlib import Path
+
+    base_dir = Path(__file__).resolve().parent
+    csv_path = base_dir / "dataset.csv"
+
+    df = pd.read_csv(csv_path)
     muestra = df.sample(frac=0.01, random_state=42)
 
     mongo_client = MongoClient("mongodb://localhost:27017/")
-    redis_client = redis.Redis(host="localhost", port=6379, decode_responses=True)
+    redis_client = redis.Redis(
+    host="localhost",
+    port=6379,
+    password="redis123",
+    decode_responses=True
+)
 
     redis_client.flushdb()
 
