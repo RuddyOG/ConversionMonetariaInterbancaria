@@ -69,12 +69,12 @@
     "hmac_key": "fortaleza_hmac_2026_secure",
     "signature_key": "fortaleza_signature_2026"
   },
-  "11": {
+"11": {
   "bank_name": "Banco FIE S.A.",
   "algorithm": "rsa",
   "encryption_key": {
-    "public_key": "-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----",
-    "private_key": "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
+    "public_key": "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA1muQehs52dq0gR8CQ68KAxZncqTWcImP0koCzHuarFz8PwNm9bzzLpMqvgsuR4bv4anWyNeAUieQnlVBprpZk+vQp6aUgKhXG/uGKKD/POX0l692ILuFXzmYOMWc+At+wPOvp5cR70xLTscI8TOao0IPKgn5Qqs7l4cKloKJIkbSZ0VEOLQpREXYH+PVuurwMUCuIhVC/ZqJKTM8BODPE9TdGn+pxJjC0vVyHGFQDaD1LuWInlBplTaat0v+Ov1T1Uh8iviPv/lndTYLLPeQQojTkwlgjGawcl+E6d6noB9IbhqbOlYJHkGOP4VzY+gjavDYqWIGYUmJ0mW49R5EfwIDAQAB\n-----END PUBLIC KEY-----",
+    "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDWa5B6GznZ2rSBHwJDrwoDFmdypNZwiY/SSgLMe5qsXPw/A2b1vPMukyq+Cy5Hhu/hqdbI14BSJ5CeVUGmulmT69CnppSAqFcb+4YooP885fSXr3Ygu4VfOZg4xZz4C37A86+nlxHvTEtOxwjxM5qjQg8qCflCqzuXhwqWgokiRtJnRUQ4tClERdgf49W66vAxQK4iFUL9mokpMzwE4M8T1N0af6nEmMLS9XIcYVANoPUu5YieUGmVNpq3S/46/VPVSHyK+I+/+Wd1Ngss95BCiNOTCWCMZrByX4Tp3qegH0huGps6VgkeQY4/hXNj6CNq8NipYgZhSYnSZbj1HkR/AgMBAAECggEAFxCza3cx9hiRMedDMphfNC189kz7ZlgIjmn4usS8bY3ZHUbWlK5SiIWQjlNHPgQqxMnPeYO5DDKxBgniHzciO10dcRNkcSHqsO9nI0gM/MuNz/gHddubgWlW0cXsLes/+Nid4iIdmJzKkxBVCsFELAtcnzyQbCwIToivymNYsMTevjtoiUdsILPzOTH/W2c/BlaeceS+LKazPerjj3s0HRka/NzuZcK0VLhVk5C4Et2yhaOZbYUmmvLUFavI4KE55crviJBXzVvXFGPZLmJGofEtR1LJuuYWPV90F1uECwGgEsCCoSBQBK+WVA5yomb83NH0UXHvsdAUpvN/6IKi1QKBgQD3DPzzW3TUaGB5XDbjWjxYvr/uuT3ozmDpndkgatBLF1EIO+zano6tkEcWfc5SpNNRb1ashrXM2BH4AzVIeix5Dw/Aznirh1rDqw//6U7XUu6WKREFmiF5mCDsj6le97/pp+43LpCP5M6otGx3iMYklU6oXia8Cc+miL4qD8urdQKBgQDeL/p+XROPRRFE5GXInxT9lh1XyLyfnl2FvV/T8WfYPVNYOG7G/UfOPb+mdTu5kuLbQ7oCV/EITmKUALhCIUJZf+hfhQrJhhs1Gwaw9rtR8ETj9o8pLcUJaIqwrUIIhCTwmWDeBaxEYhRCNWzm7t7X3yXru5GHS8X7mqapWXGVowKBgH5PKqi1krbioqiJyBpXUVFCPVktZoS3t37Z0GAtnE84HZrrIH7p4CLHCEFskudYFB6noRXWTe7sbctywHRM2p4OYEyAg9uW+YXe2PBLdZ7LbOZjGqvVkNXdPMAV909xtbIdxMJ70TdwkWRZ0rcOu9eKasvUT1OGZJ9NfIR+zO/dAoGAZk+thzaQ5S4mr5SEkgc/AS54wI183ftskUMMt2m4KcjDciI6UIMc54ljkOD26ZMLx2++XYnlQa/mkMRsFHeAN/pAJIv81aNdL+0L/bz/sNF0x4wnjAy5aIWtJ4IAoC9JW0klY9c05iBLt9kmFoj0MG9e5NfwQV7RAfTKvbykIwUCgYEAmPg1iNnHddu2qbkvdVFqJRzLtGtjwi7jrKyi3Pvq9BGxt/9QB0MgRTG1/rLiIx7tqrB59V7l3OmeGyB4exnNOX/NN2HLjNNJyBC/o46lzplxV70cYKuZ4dm4M6+wQ/pUX44IYtum6vwUEDfowbNotcNPBPxvnBENjowgT4FhNbs=\n-----END PRIVATE KEY-----"
   },
   "hmac_key": "fie_hmac_2026_secure",
   "signature_key": "fie_signature_2026"

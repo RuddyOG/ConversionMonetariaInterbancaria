@@ -256,20 +256,26 @@ def _fetch_mongo_pending(bank_id: int, limit: int) -> List[Dict[str, Any]]:
 
 
 def _fetch_redis_pending(limit: int) -> List[Dict[str, Any]]:
-    cuentas = list(redis_client.smembers(f"{REDIS_BANK_14_PREFIX}:cuentas"))
-    cuentas = cuentas[:limit]
+    keys = redis_client.keys(f"{REDIS_BANK_14_PREFIX}:cuenta:*")
+
     out: List[Dict[str, Any]] = []
-    for cuenta in cuentas:
-        key = f"{REDIS_BANK_14_PREFIX}:cuenta:{cuenta}"
+
+    for key in keys[:limit]:
         data = redis_client.hgetall(key)
         if not data:
             continue
+
         saldo_bs_cipher = data.get("saldo_bs_cipher") or data.get("saldo_bs") or ""
+
         if saldo_bs_cipher:
             continue
-        out.append(_normalize_nonrel_doc(data))
-    return out
 
+        out.append({
+            "id": data.get("id") or key.split(":")[-1],
+            "saldo_usd_cipher": data.get("saldo_usd_cipher") or data.get("saldo_usd") or "",
+        })
+
+    return out
 
 def fetch_pending_accounts(bank_id: int, limit: int) -> List[Dict[str, Any]]:
     if bank_id in RELATIONAL_BANKS_1_TO_5:

@@ -58,8 +58,15 @@ redis_client = redis.Redis(
 
 crypto = CryptoManager()
 key_manager = KeyManager()
-nonce_manager = NonceManager()
-payload_security = PayloadSecurity(key_manager, nonce_manager)
+
+
+def _secure_payload(payload: Dict[str, Any], bank_id: int | str) -> Dict[str, Any]:
+    """
+    Genera un payload seguro con NonceManager NUEVO por request.
+    Esto evita falsos replay cuando hay concurrencia.
+    """
+    local_payload_security = PayloadSecurity(key_manager, NonceManager())
+    return local_payload_security.secure_payload(payload, bank_id=bank_id)
 
 
 def _ensure_asfi_bancos_1_to_14() -> None:
@@ -297,10 +304,10 @@ def _fetch_bank_row(bank_id: int, cuenta_id: str) -> Optional[Dict[str, Any]]:
 
 
 def _build_pending_payload(cfg: RunConfig, bank_id: int) -> Dict[str, Any]:
-    payload: Dict[str, Any] = {}
-    if cfg.limit_per_bank is not None:
-        payload["limit"] = cfg.limit_per_bank
-    return payload_security.secure_payload(payload, bank_id=bank_id)
+    # siempre mandar limit para que el backend no reciba payload incompleto
+    limit = cfg.limit_per_bank if cfg.limit_per_bank is not None else 50000
+    payload: Dict[str, Any] = {"limit": limit}
+    return _secure_payload(payload, bank_id=bank_id)
 
 
 def process_bank(bank_id: int, cfg: RunConfig, audit_log_path: str) -> Tuple[int, int, int]:
@@ -314,8 +321,13 @@ def process_bank(bank_id: int, cfg: RunConfig, audit_log_path: str) -> Tuple[int
         secure_req = _build_pending_payload(cfg, bank_id)
 
         pending_resp = client.post(pending_url, json=secure_req)
-        pending_resp.raise_for_status()
-        cuentas = pending_resp.json().get("cuentas", [])
+
+        if pending_resp.status_code != 200:
+            print(f"❌ Banco {bank_id} ERROR {pending_resp.status_code}: {pending_resp.text}")
+            return 0, 0, 0
+
+        data = pending_resp.json()
+        cuentas = data.get("cuentas") or data.get("data") or data.get("results") or []
 
         for cuenta in cuentas:
             cuenta_id = str(cuenta.get("id", "")).strip()
@@ -354,12 +366,33 @@ def process_bank(bank_id: int, cfg: RunConfig, audit_log_path: str) -> Tuple[int
                 )
 
                 update_url = f"{cfg.bank_api_base_url}/banks/{bank_id}/cuentas/{cuenta_id}/saldo"
-                secure_update = payload_security.secure_payload(
-                    {"saldo_bs": saldo_bs_convertido, "codigo_verificacion": codigo_verificacion},
+                secure_update = _secure_payload(
+                    {
+                        "saldo_bs": saldo_bs_convertido,
+                        "codigo_verificacion": codigo_verificacion,
+                    },
                     bank_id=bank_id,
                 )
+
                 update_resp = client.put(update_url, json=secure_update)
-                update_resp.raise_for_status()
+
+                if update_resp.status_code != 200:
+                    errores += 1
+                    _append_audit_row(
+                        audit_log_path,
+                        [
+                            fecha_now.isoformat(),
+                            cfg.currency_rate,
+                            bank_id,
+                            cuenta_id,
+                            "",
+                            "",
+                            "",
+                            "ERR",
+                            f"Update HTTP {update_resp.status_code}: {update_resp.text}",
+                        ],
+                    )
+                    continue
 
                 db_row = _fetch_bank_row(bank_id, cuenta_id)
                 if not db_row:
